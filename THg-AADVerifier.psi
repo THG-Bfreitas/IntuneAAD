@@ -83,5 +83,6 @@ Start-BitsTransfer -Source https://github.com/THG-Bfreitas/It-Scripts/raw/main/c
 write-host Running CCMCLEAN
 start-Process C:\hilb\ccmclean.exe -ArgumentList "/q"
 
-
+Start-Sleep -Milliseconds 20000
+Write-Host "Running DSREGCMD"
 Stop-Transcript

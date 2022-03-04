@@ -1,0 +1,87 @@
+#SCCM File Check
+
+#Settings Variables
+$THGComputername = [System.Net.Dns]::GetHostName()
+$user = $env:UserName
+$domain = $env:UserDomain
+#Sendgrid API secure string
+$Username = 'apikey'
+$Password = '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'
+$pass = ConvertTo-SecureString -AsPlainText $Password -Force
+$SecureString = $pass
+$MySecureCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Username, $SecureString
+
+#folder creation
+mkdir C:\hilb -ErrorAction SilentlyContinue
+
+#starting Transcript
+Start-Transcript C:\hilb\SCCMRemoval.txt -Append
+
+write-host "Enabling scheduled Task"
+Enable-ScheduledTask -Taskpath "\Microsoft\Windows\Workplace join\" -taskname "automatic-device-join"
+
+
+#GET-ScheduledTask -Taskpath "\Microsoft\Windows\EnterpriseMgmt\348E4C9A-F2BC-4402-9E13-07C6631A4435\" -taskname "Provisioning initiated session"
+
+#checking for CCMSetup
+    if (Test-Path -Path "$Env:SystemDrive\Windows\ccmsetup\ccmsetup.exe") {
+        Write-host "$THGComputername Has SCCM Installed"
+        # Stop SCCM services
+        Write-Host "Stopping SCCM services"
+        try{
+        Get-Service -Name CcmExec  | Stop-Service -Force -Verbose
+        #Get-Service -Name ccmsetup | Stop-Service -Force -Verbose
+        taskkill /im ccmsetup.exe /f
+        } catch{
+        Write-host Error Stopping Services
+         Send-MailMessage -To "wvd_support@hilbgroup.com" -From "AAD-Automation@hilbgroup.com" -Subject "AAD-Automation -  $($THGComputername) Failed to Stop SCCM $($user) $($domain)" -Body "Notification of AAD Automation Script : $($THGComputername) SCCM setup was found : C:\Windows\ccmsetup\ccmsetup.exe but failed Stop the process $($user) $($domain)  " -Credential $MySecureCreds -SmtpServer "smtp.sendgrid.com" -Port 587
+       
+        }
+        # Run the SCCM uninstaller
+        try{
+        Write-Host "Uninstalling SCCM"
+        Start-Process -FilePath "$Env:SystemDrive\Windows\ccmsetup\ccmsetup.exe" -ArgumentList '/uninstall'
+         } catch {
+         Write-host Error running uninstaller sending email notification
+         Send-MailMessage -To "wvd_support@hilbgroup.com" -From "AAD-Automation@hilbgroup.com" -Subject "AAD-Automation -  $($THGComputername) Failed to remove SCCM $($user) $($domain)" -Body "Notification of AAD Automation Script : $($THGComputername) SCCM setup was found : C:\Windows\ccmsetup\ccmsetup.exe but failed to launch the uninstall $($user) $($domain)  " -Credential $MySecureCreds -SmtpServer "smtp.sendgrid.com" -Port 587
+          }
+
+        # Wait for the uninstaller to finish
+        do {
+            Start-Sleep -Milliseconds 1000
+            $Process = (Get-Process ccmsetup -ErrorAction SilentlyContinue)
+        } until ($null -eq $Process)
+        #10 Minute Marker
+
+        #checking if uninstall worked
+        Write-Host "checking if uninstall worked"
+        if (Test-Path -Path "$Env:SystemDrive\Windows\ccmsetup\ccmsetup.exe") {
+        #Still found CCMSetup
+        Send-MailMessage -To "wvd_support@hilbgroup.com" -From "AAD-Automation@hilbgroup.com" -Subject "AAD-Automation -  $($THGComputername) Failed to remove SCCM $($user)" -Body "Notification of AAD Automation Script : $($THGComputername) SCCM setup was found : C:\Windows\ccmsetup\ccmsetup.exe but failed to launch the uninstall $($user) $($domain) " -Credential $MySecureCreds -SmtpServer "smtp.sendgrid.com" -Port 587
+        }Else{
+        Write-Host "SCCM uninstallation completed"
+
+        #Force Reg
+        Write-Host "Running DSREGCMD"
+        dsregcmd /join
+        Start-Sleep -Milliseconds 1000
+
+
+        }
+    } else {
+     Write-host "$THGComputername does not have SCCM Installed"
+     Write-Host "Running DSREGCMD"
+     dsregcmd /join
+    }
+
+    #Event Viewer Search tool
+
+#CCM CLEAN TOOL Download
+Write-host Downloading CCMCLEAN
+Start-BitsTransfer -Source https://github.com/THG-Bfreitas/It-Scripts/raw/main/ccmclean.exe -Destination C:\hilb\ccmclean.exe
+
+write-host Running CCMCLEAN
+start-Process C:\hilb\ccmclean.exe -ArgumentList "/q"
+
+
+Stop-Transcript

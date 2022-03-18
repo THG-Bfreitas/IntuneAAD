@@ -6,7 +6,7 @@ $user = $env:UserName
 $domain = $env:UserDomain
 #Sendgrid API secure string
 $Username = 'apikey'
-$Password = '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'
+
 $pass = ConvertTo-SecureString -AsPlainText $Password -Force
 $SecureString = $pass
 $MySecureCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $Username, $SecureString
